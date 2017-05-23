@@ -25,10 +25,10 @@ import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.j2objc.annotations.WeakOuter;
+import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.SortedMap;
 import java.util.Spliterator;
@@ -155,7 +155,7 @@ public final class ImmutableSortedMap<K, V> extends ImmutableSortedMapFauxveride
   }
 
   private static <K extends Comparable<? super K>, V> ImmutableSortedMap<K, V> ofEntries(
-      ImmutableMapEntry<K, V>... entries) {
+      Entry<K, V>... entries) {
     return fromEntries(Ordering.natural(), false, entries, entries.length);
   }
 
@@ -363,7 +363,7 @@ public final class ImmutableSortedMap<K, V> extends ImmutableSortedMapFauxveride
   }
 
   private static <K, V> ImmutableSortedMap<K, V> fromEntries(
-      Comparator<? super K> comparator,
+      final Comparator<? super K> comparator,
       boolean sameComparator,
       Entry<K, V>[] entryArray,
       int size) {
@@ -387,7 +387,14 @@ public final class ImmutableSortedMap<K, V> extends ImmutableSortedMapFauxveride
           }
         } else {
           // Need to sort and check for nulls and dupes.
-          Arrays.sort(entryArray, 0, size, Ordering.from(comparator).<K>onKeys());
+          // Inline the Comparator implementation rather than transforming with a Function
+          // to save code size.
+          Arrays.sort(entryArray, 0, size, new Comparator<Entry<K, V>>() {
+            @Override
+            public int compare(Entry<K, V> e1, Entry<K, V> e2) {
+              return comparator.compare(e1.getKey(), e2.getKey());
+            }
+          });
           K prevKey = entryArray[0].getKey();
           keys[0] = prevKey;
           values[0] = entryArray[0].getValue();
@@ -640,7 +647,8 @@ public final class ImmutableSortedMap<K, V> extends ImmutableSortedMapFauxveride
         return new ImmutableAsList<Entry<K, V>>() {
           @Override
           public Entry<K, V> get(int index) {
-            return Maps.immutableEntry(keySet.asList().get(index), valueList.get(index));
+            return new AbstractMap.SimpleImmutableEntry<K, V>(
+                keySet.asList().get(index), valueList.get(index));
           }
 
           @Override
@@ -672,6 +680,11 @@ public final class ImmutableSortedMap<K, V> extends ImmutableSortedMapFauxveride
     return keySet;
   }
 
+  @Override
+  ImmutableSet<K> createKeySet() {
+    throw new AssertionError("should never be called");
+  }
+
   /**
    * Returns an immutable collection of the values in this map, sorted by the
    * ordering of the corresponding keys.
@@ -679,6 +692,11 @@ public final class ImmutableSortedMap<K, V> extends ImmutableSortedMapFauxveride
   @Override
   public ImmutableCollection<V> values() {
     return valueList;
+  }
+
+  @Override
+  ImmutableCollection<V> createValues() {
+    throw new AssertionError("should never be called");
   }
 
   /**

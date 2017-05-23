@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.errorprone.annotations.CompatibleWith;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -104,20 +105,19 @@ public interface Multiset<E> extends Collection<E> {
   int size();
 
   /**
-   * Returns the number of occurrences of an element in this multiset (the
-   * <i>count</i> of the element). Note that for an {@link Object#equals}-based
-   * multiset, this gives the same result as {@link Collections#frequency}
-   * (which would presumably perform more poorly).
+   * Returns the number of occurrences of an element in this multiset (the <i>count</i> of the
+   * element). Note that for an {@link Object#equals}-based multiset, this gives the same result as
+   * {@link Collections#frequency} (which would presumably perform more poorly).
    *
-   * <p><b>Note:</b> the utility method {@link Iterables#frequency} generalizes
-   * this operation; it correctly delegates to this method when dealing with a
-   * multiset, but it can also accept any other iterable type.
+   * <p><b>Note:</b> the utility method {@link Iterables#frequency} generalizes this operation; it
+   * correctly delegates to this method when dealing with a multiset, but it can also accept any
+   * other iterable type.
    *
    * @param element the element to count occurrences of
-   * @return the number of occurrences of the element in this multiset; possibly
-   *     zero but never negative
+   * @return the number of occurrences of the element in this multiset; possibly zero but never
+   *     negative
    */
-  int count(@Nullable Object element);
+  int count(@Nullable @CompatibleWith("E") Object element);
 
   // Bulk Operations
 
@@ -144,20 +144,19 @@ public interface Multiset<E> extends Collection<E> {
   int add(@Nullable E element, int occurrences);
 
   /**
-   * Removes a number of occurrences of the specified element from this
-   * multiset. If the multiset contains fewer than this number of occurrences to
-   * begin with, all occurrences will be removed.  Note that if
-   * {@code occurrences == 1}, this is functionally equivalent to the call
-   * {@code remove(element)}.
+   * Removes a number of occurrences of the specified element from this multiset. If the multiset
+   * contains fewer than this number of occurrences to begin with, all occurrences will be removed.
+   * Note that if {@code occurrences == 1}, this is functionally equivalent to the call {@code
+   * remove(element)}.
    *
    * @param element the element to conditionally remove occurrences of
-   * @param occurrences the number of occurrences of the element to remove. May
-   *     be zero, in which case no change will be made.
+   * @param occurrences the number of occurrences of the element to remove. May be zero, in which
+   *     case no change will be made.
    * @return the count of the element before the operation; possibly zero
    * @throws IllegalArgumentException if {@code occurrences} is negative
    */
   @CanIgnoreReturnValue
-  int remove(@Nullable Object element, int occurrences);
+  int remove(@Nullable @CompatibleWith("E") Object element, int occurrences);
 
   /**
    * Adds or removes the necessary occurrences of an element such that the
@@ -413,7 +412,7 @@ public interface Multiset<E> extends Collection<E> {
    * collection, by one.
    *
    * <p>To both add the element and obtain the previous count of that element,
-   * use {@link #add(E, int) add}{@code (element, 1)} instead.
+   * use {@link #add(Object, int) add}{@code (element, 1)} instead.
    *
    * @param element the element to add one occurrence of; may be null only if
    *     explicitly allowed by the implementation
@@ -437,7 +436,7 @@ public interface Multiset<E> extends Collection<E> {
    * or of the wrong type.
    *
    * <p>To both remove the element and obtain the previous count of that element,
-   * use {@link #remove(E, int) remove}{@code (element, 1)} instead.
+   * use {@link #remove(Object, int) remove}{@code (element, 1)} instead.
    *
    * @param element the element to remove one occurrence of
    * @return {@code true} if an occurrence was found and removed

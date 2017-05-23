@@ -293,6 +293,22 @@ public class ImmutableMultisetTest extends TestCase {
             ImmutableMultiset.of("a", "a", "b", "c", "c", "c"), "a", "a", "b", "c", "c", "c");
   }
 
+  public void testToImmutableMultisetCountFunction() {
+    BiPredicate<ImmutableMultiset<String>, ImmutableMultiset<String>> equivalence =
+        (ms1, ms2) -> ms1.equals(ms2) && ms1.entrySet().asList().equals(ms2.entrySet().asList());
+    CollectorTester.of(
+            ImmutableMultiset.<Multiset.Entry<String>, String>toImmutableMultiset(
+                Multiset.Entry::getElement, Multiset.Entry::getCount),
+            equivalence)
+        .expectCollects(ImmutableMultiset.of())
+        .expectCollects(
+            ImmutableMultiset.of("a", "a", "b", "c", "c", "c"),
+            Multisets.immutableEntry("a", 1),
+            Multisets.immutableEntry("b", 1),
+            Multisets.immutableEntry("a", 1),
+            Multisets.immutableEntry("c", 3));
+  }
+
   public void testToImmutableMultiset_duplicates() {
     class TypeWithDuplicates {
       final int a;
@@ -342,11 +358,15 @@ public class ImmutableMultisetTest extends TestCase {
     TypeWithDuplicates c = new TypeWithDuplicates(3, 1);
     CollectorTester.of(collector, equivalence)
         .expectCollects(
-            ImmutableMultiset.<TypeWithDuplicates>builder()
-                .add(a)
-                .addCopies(b1, 2)
-                .add(c)
-                .build(),
+            ImmutableMultiset.<TypeWithDuplicates>builder().add(a).addCopies(b1, 2).add(c).build(),
+            a,
+            b1,
+            c,
+            b2);
+    collector = ImmutableMultiset.toImmutableMultiset(e -> e, e -> 1);
+    CollectorTester.of(collector, equivalence)
+        .expectCollects(
+            ImmutableMultiset.<TypeWithDuplicates>builder().add(a).addCopies(b1, 2).add(c).build(),
             a,
             b1,
             c,
@@ -550,6 +570,9 @@ public class ImmutableMultisetTest extends TestCase {
   public void testIterationOrder() {
     Collection<String> c = ImmutableMultiset.of("a", "b", "a");
     assertThat(c).containsExactly("a", "a", "b").inOrder();
+    assertThat(ImmutableMultiset.of("c", "b", "a", "c").elementSet())
+        .containsExactly("c", "b", "a")
+        .inOrder();
   }
 
   public void testMultisetWrites() {
@@ -580,5 +603,18 @@ public class ImmutableMultisetTest extends TestCase {
         .addEqualityGroup(ImmutableMultiset.of(1, 1), ImmutableMultiset.of(1, 1))
         .addEqualityGroup(ImmutableMultiset.of(1, 2, 1), ImmutableMultiset.of(2, 1, 1))
         .testEquals();
+  }
+
+  public void testIterationOrderThroughBuilderRemovals() {
+    ImmutableMultiset.Builder<String> builder = ImmutableMultiset.builder();
+    builder.addCopies("a", 2);
+    builder.add("b");
+    builder.add("c");
+    builder.setCount("b", 0);
+    ImmutableMultiset<String> multiset = builder.build();
+    assertThat(multiset.elementSet()).containsExactly("a", "c").inOrder();
+    builder.add("b");
+    assertThat(builder.build().elementSet()).containsExactly("a", "c", "b").inOrder();
+    assertThat(multiset.elementSet()).containsExactly("a", "c").inOrder();
   }
 }

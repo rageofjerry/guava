@@ -23,6 +23,8 @@ import static java.util.concurrent.atomic.AtomicReferenceFieldUpdater.newUpdater
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.errorprone.annotations.DoNotMock;
+import com.google.j2objc.annotations.ReflectionSupport;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
@@ -42,22 +44,24 @@ import javax.annotation.Nullable;
  * An abstract implementation of {@link ListenableFuture}, intended for advanced users only. More
  * common ways to create a {@code ListenableFuture} include instantiating a {@link SettableFuture},
  * submitting a task to a {@link ListeningExecutorService}, and deriving a {@code Future} from an
- * existing one, typically using methods like {@link Futures#transform(ListenableFuture, Function)
- * Futures.transform} and {@link Futures#catching(ListenableFuture, Class, Function)
- * Futures.catching}.
+ * existing one, typically using methods like {@link Futures#transform(ListenableFuture,
+ * com.google.common.base.Function, java.util.concurrent.Executor) Futures.transform} and {@link
+ * Futures#catching(ListenableFuture, Class, com.google.common.base.Function,
+ * java.util.concurrent.Executor) Futures.catching}.
  *
  * <p>This class implements all methods in {@code ListenableFuture}. Subclasses should provide a way
  * to set the result of the computation through the protected methods {@link #set(Object)}, {@link
  * #setFuture(ListenableFuture)} and {@link #setException(Throwable)}. Subclasses may also override
- * {@link #interruptTask()}, which will be invoked automatically if a call to {@link
- * #cancel(boolean) cancel(true)} succeeds in canceling the future. Subclasses should rarely
- * override other methods.
+ * {@link #afterDone()}, which will be invoked automatically when the future completes. Subclasses
+ * should rarely override other methods.
  *
  * @author Sven Mawson
  * @author Luke Sandberg
  * @since 1.0
  */
+@DoNotMock("Use Futures.immediate*Future or SettableFuture")
 @GwtCompatible(emulated = true)
+@ReflectionSupport(value = ReflectionSupport.Level.FULL)
 public abstract class AbstractFuture<V> implements ListenableFuture<V> {
   // NOTE: Whenever both tests are cheap and functional, it's faster to use &, | instead of &&, ||
 
@@ -346,20 +350,12 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
   //   and we could use that to make a decision about whether or not we timed out prior to being
   //   unparked.
 
-  /*
-   * Improve the documentation of when InterruptedException is thrown. Our behavior matches the
-   * JDK's, but the JDK's documentation is misleading.
-   */
-
   /**
    * {@inheritDoc}
    *
    * <p>The default {@link AbstractFuture} implementation throws {@code InterruptedException} if the
-   * current thread is interrupted before or during the call, even if the value is already
-   * available.
+   * current thread is interrupted during the call, even if the value is already available.
    *
-   * @throws InterruptedException if the current thread was interrupted before or during the call
-   *     (optional but recommended).
    * @throws CancellationException {@inheritDoc}
    */
   @CanIgnoreReturnValue
@@ -373,7 +369,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
       throw new InterruptedException();
     }
     Object localValue = value;
-    if (localValue != null & !(localValue instanceof AbstractFuture.SetFuture)) {
+    if (localValue != null & !(localValue instanceof SetFuture)) {
       return getDoneValue(localValue);
     }
     // we delay calling nanoTime until we know we will need to either park or spin
@@ -397,7 +393,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
               // Otherwise re-read and check doneness. If we loop then it must have been a spurious
               // wakeup
               localValue = value;
-              if (localValue != null & !(localValue instanceof AbstractFuture.SetFuture)) {
+              if (localValue != null & !(localValue instanceof SetFuture)) {
                 return getDoneValue(localValue);
               }
 
@@ -421,7 +417,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
     // waiters list
     while (remainingNanos > 0) {
       localValue = value;
-      if (localValue != null & !(localValue instanceof AbstractFuture.SetFuture)) {
+      if (localValue != null & !(localValue instanceof SetFuture)) {
         return getDoneValue(localValue);
       }
       if (Thread.interrupted()) {
@@ -432,20 +428,12 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
     throw new TimeoutException();
   }
 
-  /*
-   * Improve the documentation of when InterruptedException is thrown. Our behavior matches the
-   * JDK's, but the JDK's documentation is misleading.
-   */
-
   /**
    * {@inheritDoc}
    *
    * <p>The default {@link AbstractFuture} implementation throws {@code InterruptedException} if the
-   * current thread is interrupted before or during the call, even if the value is already
-   * available.
+   * current thread is interrupted during the call, even if the value is already available.
    *
-   * @throws InterruptedException if the current thread was interrupted before or during the call
-   *     (optional but recommended).
    * @throws CancellationException {@inheritDoc}
    */
   @CanIgnoreReturnValue
@@ -455,7 +443,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
       throw new InterruptedException();
     }
     Object localValue = value;
-    if (localValue != null & !(localValue instanceof AbstractFuture.SetFuture)) {
+    if (localValue != null & !(localValue instanceof SetFuture)) {
       return getDoneValue(localValue);
     }
     Waiter oldHead = waiters;
@@ -475,7 +463,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
             // Otherwise re-read and check doneness. If we loop then it must have been a spurious
             // wakeup
             localValue = value;
-            if (localValue != null & !(localValue instanceof AbstractFuture.SetFuture)) {
+            if (localValue != null & !(localValue instanceof SetFuture)) {
               return getDoneValue(localValue);
             }
           }
@@ -510,7 +498,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
   @Override
   public boolean isDone() {
     final Object localValue = value;
-    return localValue != null & !(localValue instanceof AbstractFuture.SetFuture);
+    return localValue != null & !(localValue instanceof SetFuture);
   }
 
   @Override
@@ -525,13 +513,19 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
    * <p>If a cancellation attempt succeeds on a {@code Future} that had previously been {@linkplain
    * #setFuture set asynchronously}, then the cancellation will also be propagated to the delegate
    * {@code Future} that was supplied in the {@code setFuture} call.
+   *
+   * <p>Rather than override this method to perform additional cancellation work or cleanup,
+   * subclasses should override {@link #afterDone}, consulting {@link #isCancelled} and {@link
+   * #wasInterrupted} as necessary. This ensures that the work is done even if the future is
+   * cancelled without a call to {@code cancel}, such as by calling {@code
+   * setFuture(cancelledFuture)}.
    */
   @CanIgnoreReturnValue
   @Override
   public boolean cancel(boolean mayInterruptIfRunning) {
     Object localValue = value;
     boolean rValue = false;
-    if (localValue == null | localValue instanceof AbstractFuture.SetFuture) {
+    if (localValue == null | localValue instanceof SetFuture) {
       // Try to delay allocating the exception. At this point we may still lose the CAS, but it is
       // certainly less likely.
       Throwable cause =
@@ -549,11 +543,10 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
             abstractFuture.interruptTask();
           }
           complete(abstractFuture);
-          if (localValue instanceof AbstractFuture.SetFuture) {
+          if (localValue instanceof SetFuture) {
             // propagate cancellation to the future set in setfuture, this is racy, and we don't
             // care if we are successful or not.
-            ListenableFuture<?> futureToPropagateTo =
-                ((AbstractFuture.SetFuture) localValue).future;
+            ListenableFuture<?> futureToPropagateTo = ((SetFuture) localValue).future;
             if (futureToPropagateTo instanceof TrustedFuture) {
               // If the future is a TrustedFuture then we specifically avoid calling cancel()
               // this has 2 benefits
@@ -564,7 +557,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
               // does nothing but delegate to this method.
               AbstractFuture<?> trusted = (AbstractFuture<?>) futureToPropagateTo;
               localValue = trusted.value;
-              if (localValue == null | localValue instanceof AbstractFuture.SetFuture) {
+              if (localValue == null | localValue instanceof SetFuture) {
                 abstractFuture = trusted;
                 continue;  // loop back up and try to complete the new future
               }
@@ -577,7 +570,7 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
         }
         // obj changed, reread
         localValue = abstractFuture.value;
-        if (!(localValue instanceof AbstractFuture.SetFuture)) {
+        if (!(localValue instanceof SetFuture)) {
           // obj cannot be null at this point, because value can only change from null to non-null.
           // So if value changed (and it did since we lost the CAS), then it cannot be null and
           // since it isn't a SetFuture, then the future must be done and we should exit the loop
@@ -593,6 +586,9 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
    * method is invoked automatically by a successful call to {@link #cancel(boolean) cancel(true)}.
    *
    * <p>The default implementation does nothing.
+   *
+   * <p>This method is likely to be deprecated. Prefer to override {@link #afterDone}, checking
+   * {@link #wasInterrupted} to decide whether to interrupt your task.
    *
    * @since 10.0
    */
@@ -792,8 +788,8 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
         Listener curr = next;
         next = next.next;
         Runnable task = curr.task;
-        if (task instanceof AbstractFuture.SetFuture) {
-          AbstractFuture.SetFuture<?> setFuture = (AbstractFuture.SetFuture) task;
+        if (task instanceof SetFuture) {
+          SetFuture<?> setFuture = (SetFuture<?>) task;
           // We unwind setFuture specifically to avoid StackOverflowErrors in the case of long
           // chains of SetFutures
           // Handling this special case is important because there is no way to pass an executor to

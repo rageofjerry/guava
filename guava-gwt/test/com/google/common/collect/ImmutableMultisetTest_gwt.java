@@ -238,6 +238,11 @@ public void testIterationOrder() throws Exception {
   testCase.testIterationOrder();
 }
 
+public void testIterationOrderThroughBuilderRemovals() throws Exception {
+  com.google.common.collect.ImmutableMultisetTest testCase = new com.google.common.collect.ImmutableMultisetTest();
+  testCase.testIterationOrderThroughBuilderRemovals();
+}
+
 public void testMultisetWrites() throws Exception {
   com.google.common.collect.ImmutableMultisetTest testCase = new com.google.common.collect.ImmutableMultisetTest();
   testCase.testMultisetWrites();
@@ -246,6 +251,11 @@ public void testMultisetWrites() throws Exception {
 public void testToImmutableMultiset() throws Exception {
   com.google.common.collect.ImmutableMultisetTest testCase = new com.google.common.collect.ImmutableMultisetTest();
   testCase.testToImmutableMultiset();
+}
+
+public void testToImmutableMultisetCountFunction() throws Exception {
+  com.google.common.collect.ImmutableMultisetTest testCase = new com.google.common.collect.ImmutableMultisetTest();
+  testCase.testToImmutableMultisetCountFunction();
 }
 
 public void testToImmutableMultiset_duplicates() throws Exception {

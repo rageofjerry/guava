@@ -17,11 +17,15 @@
 package com.google.common.collect;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.collect.CollectPreconditions.checkNonnegative;
 
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collector;
 
 /**
  * Provides static methods for working with {@link Comparator} instances. For many other helpful
@@ -103,5 +107,85 @@ public final class Comparators {
       }
     }
     return true;
+  }
+
+  /**
+   * Returns a {@code Collector} that returns the {@code k} smallest (relative to the specified
+   * {@code Comparator}) input elements, in ascending order, as an unmodifiable {@code List}.
+   * Ties are broken arbitrarily.
+   *
+   * For example:
+   *  <pre>   {@code
+   *
+   *   Stream.of("foo", "quux", "banana", "elephant")
+   *       .collect(least(2, comparingInt(String::length)))
+   *   // returns {"foo", "quux"}}</pre>
+   *
+   * <p>This {@code Collector} uses O(k) memory and takes expected time O(n)
+   * (worst-case O(n log k)), as opposed to e.g. {@code Stream.sorted(comparator).limit(k)}, which
+   * currently takes O(n log n) time and O(n) space.
+   *
+   * @throws IllegalArgumentException if {@code k < 0}
+   * @since 22.0
+   */
+  public static <T> Collector<T, ?, List<T>> least(int k, Comparator<? super T> comparator) {
+    checkNonnegative(k, "k");
+    checkNotNull(comparator);
+    return Collector.of(
+        () -> TopKSelector.<T>least(k, comparator),
+        TopKSelector::offer,
+        TopKSelector::combine,
+        TopKSelector::topK,
+        Collector.Characteristics.UNORDERED);
+  }
+
+  /**
+   * Returns a {@code Collector} that returns the {@code k} greatest (relative to the specified
+   * {@code Comparator}) input elements, in descending order, as an unmodifiable {@code List}.
+   * Ties are broken arbitrarily.
+   *
+   * For example:
+   *  <pre>   {@code
+   *
+   *   Stream.of("foo", "quux", "banana", "elephant")
+   *       .collect(greatest(2, comparingInt(String::length)))
+   *   // returns {"elephant", "banana"}}</pre>
+   *
+   * <p>This {@code Collector} uses O(k) memory and takes expected time O(n)
+   * (worst-case O(n log k)), as opposed to e.g.
+   * {@code Stream.sorted(comparator.reversed()).limit(k)}, which currently takes O(n log n) time
+   * and O(n) space.
+   *
+   * @throws IllegalArgumentException if {@code k < 0}
+   * @since 22.0
+   */
+  public static <T> Collector<T, ?, List<T>> greatest(int k, Comparator<? super T> comparator) {
+    return least(k, comparator.reversed());
+  }
+
+  /**
+   * Returns a comparator of {@link Optional} values which treats {@link Optional#empty} as less
+   * than all other values, and orders the rest using {@code valueComparator} on the contained
+   * value.
+   *
+   * @since 22.0
+   */
+  @Beta
+  public static <T> Comparator<Optional<T>> emptiesFirst(Comparator<T> valueComparator) {
+    checkNotNull(valueComparator);
+    return Comparator.comparing(o -> o.orElse(null), Comparator.nullsFirst(valueComparator));
+  }
+
+  /**
+   * Returns a comparator of {@link Optional} values which treats {@link Optional#empty} as greater
+   * than all other values, and orders the rest using {@code valueComparator} on the contained
+   * value.
+   *
+   * @since 22.0
+   */
+  @Beta
+  public static <T> Comparator<Optional<T>> emptiesLast(Comparator<T> valueComparator) {
+    checkNotNull(valueComparator);
+    return Comparator.comparing(o -> o.orElse(null), Comparator.nullsLast(valueComparator));
   }
 }

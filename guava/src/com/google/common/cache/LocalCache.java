@@ -18,6 +18,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.cache.CacheBuilder.NULL_TICKER;
 import static com.google.common.cache.CacheBuilder.UNSET_INT;
+import static com.google.common.util.concurrent.Futures.transform;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.Uninterruptibles.getUninterruptibly;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
@@ -548,9 +549,8 @@ class LocalCache<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V> 
       }
     };
 
-    /**
-     * Masks used to compute indices in the following table.
-     */
+    // Masks used to compute indices in the following table.
+
     static final int ACCESS_MASK = 1;
     static final int WRITE_MASK = 2;
     static final int WEAK_MASK = 4;
@@ -746,21 +746,22 @@ class LocalCache<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V> 
   /**
    * An entry in a reference map.
    *
-   * Entries in the map can be in the following states:
+   * <p>Entries in the map can be in the following states:
    *
-   * Valid:
+   * <p>Valid:
    *
-   * - Live: valid key/value are set
+   * <ul>
+   *   <li>Live: valid key/value are set
+   *   <li>Loading: loading is pending
+   * </ul>
    *
-   * - Loading: loading is pending
+   * <p>Invalid:
    *
-   * Invalid:
-   *
-   * - Expired: time expired (key/value may still be set)
-   *
-   * - Collected: key/value was partially collected, but not yet cleaned up
-   *
-   * - Unset: marked as unset, awaiting cleanup or reuse
+   * <ul>
+   *   <li>Expired: time expired (key/value may still be set)
+   *   <li>Collected: key/value was partially collected, but not yet cleaned up
+   *   <li>Unset: marked as unset, awaiting cleanup or reuse
+   * </ul>
    */
   interface ReferenceEntry<K, V> {
     /**
@@ -2333,6 +2334,7 @@ class LocalCache<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V> 
       ValueReference<K, V> valueReference = null;
       LoadingValueReference<K, V> loadingValueReference = null;
       boolean createNewEntry = true;
+      V newValue;
 
       lock();
       try {
@@ -2381,16 +2383,8 @@ class LocalCache<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V> 
         } else {
           e.setValueReference(loadingValueReference);
         }
-      } finally {
-        unlock();
-        postWriteCleanup();
-      }
 
-      // Synchronizes on the entry to allow failing fast when a recursive load is
-      // detected. This may be circumvented when an entry is copied, but will fail fast most
-      // of the time.
-      synchronized (e) {
-        V newValue = loadingValueReference.compute(key, function);
+        newValue = loadingValueReference.compute(key, function);
         if (newValue != null) {
           try {
             return getAndRecordStats(
@@ -2402,14 +2396,12 @@ class LocalCache<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V> 
           removeLoadingValue(key, hash, loadingValueReference);
           return null;
         } else {
-          lock();
-          try {
-            removeEntry(e, hash, RemovalCause.EXPLICIT);
-          } finally {
-            unlock();
-          }
+          removeEntry(e, hash, RemovalCause.EXPLICIT);
           return null;
         }
+      } finally {
+        unlock();
+        postWriteCleanup();
       }
     }
 
@@ -3722,7 +3714,7 @@ class LocalCache<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V> 
         }
         // To avoid a race, make sure the refreshed value is set into loadingValueReference
         // *before* returning newValue from the cache query.
-        return Futures.transform(
+        return transform(
             newValue,
             new com.google.common.base.Function<V, V>() {
               @Override
@@ -3730,7 +3722,8 @@ class LocalCache<K, V> extends AbstractMap<K, V> implements ConcurrentMap<K, V> 
                 LoadingValueReference.this.set(newValue);
                 return newValue;
               }
-            });
+            },
+            directExecutor());
       } catch (Throwable t) {
         ListenableFuture<V> result = setException(t) ? futureValue : fullyFailedFuture(t);
         if (t instanceof InterruptedException) {

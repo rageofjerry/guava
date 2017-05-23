@@ -30,6 +30,7 @@ import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.NavigableSet;
@@ -420,7 +421,7 @@ public abstract class ImmutableSortedSet<E> extends ImmutableSortedSetFauxveride
    * ordered by the reverse of their natural ordering.
    */
   public static <E extends Comparable<?>> Builder<E> reverseOrder() {
-    return new Builder<E>(Ordering.natural().reverse());
+    return new Builder<E>(Collections.reverseOrder());
   }
 
   /**
@@ -766,10 +767,11 @@ public abstract class ImmutableSortedSet<E> extends ImmutableSortedSetFauxveride
     return result;
   }
 
+  // Most classes should implement this as new DescendingImmutableSortedSet<E>(this),
+  // but we push down that implementation because ProGuard can't eliminate it even when it's always
+  // overridden.
   @GwtIncompatible // NavigableSet
-  ImmutableSortedSet<E> createDescendingSet() {
-    return new DescendingImmutableSortedSet<E>(this);
-  }
+  abstract ImmutableSortedSet<E> createDescendingSet();
 
   @Override
   public Spliterator<E> spliterator() {

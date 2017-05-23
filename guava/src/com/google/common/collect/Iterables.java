@@ -26,6 +26,7 @@ import com.google.common.annotations.GwtIncompatible;
 import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.util.Collection;
 import java.util.Comparator;
@@ -74,7 +75,7 @@ public final class Iterables {
       Iterable<T> result = (Iterable<T>) iterable;
       return result;
     }
-    return new UnmodifiableIterable<T>(iterable);
+    return new UnmodifiableIterable<>(iterable);
   }
 
   /**
@@ -340,7 +341,8 @@ public final class Iterables {
    * stream.filter(element::equals).count()}. If {@code element} might be null, use {@code
    * stream.filter(Predicate.isEqual(element)).count()} instead.
    *
-   * @see Collections#frequency
+   * @see java.util.Collections#frequency(Collection, Object) Collections.frequency(Collection,
+   *      Object)
    */
   public static int frequency(Iterable<?> iterable, @Nullable Object element) {
     if ((iterable instanceof Multiset)) {
@@ -409,6 +411,7 @@ public final class Iterables {
    * this method is {@code Stream.generate(() -> e)}. Otherwise, put the elements in a collection
    * and use {@code Stream.generate(() -> collection).flatMap(Collection::stream)}.
    */
+  @SafeVarargs
   public static <T> Iterable<T> cycle(T... elements) {
     return cycle(Lists.newArrayList(elements));
   }
@@ -477,8 +480,9 @@ public final class Iterables {
    *
    * @throws NullPointerException if any of the provided iterables is null
    */
+  @SafeVarargs
   public static <T> Iterable<T> concat(Iterable<? extends T>... inputs) {
-    return concat(ImmutableList.copyOf(inputs));
+    return FluentIterable.concat(inputs);
   }
 
   /**
@@ -604,35 +608,12 @@ public final class Iterables {
    *     (ImmutableList) stream.filter(NewType.class::isInstance).collect(toImmutableList());}
    * </pre>
    */
+  @SuppressWarnings("unchecked")
   @GwtIncompatible // Class.isInstance
   public static <T> Iterable<T> filter(final Iterable<?> unfiltered, final Class<T> desiredType) {
     checkNotNull(unfiltered);
     checkNotNull(desiredType);
-    return new FluentIterable<T>() {
-      @Override
-      public Iterator<T> iterator() {
-        return Iterators.filter(unfiltered.iterator(), desiredType);
-      }
-
-      @SuppressWarnings("unchecked")
-      @Override
-      public void forEach(Consumer<? super T> action) {
-        checkNotNull(action);
-        unfiltered.forEach(
-            (Object o) -> {
-              if (desiredType.isInstance(o)) {
-                action.accept(desiredType.cast(o));
-              }
-            });
-      }
-
-      @SuppressWarnings("unchecked")
-      @Override
-      public Spliterator<T> spliterator() {
-        return (Spliterator<T>)
-            CollectSpliterators.filter(unfiltered.spliterator(), desiredType::isInstance);
-      }
-    };
+    return (Iterable<T>) filter(unfiltered, Predicates.instanceOf(desiredType));
   }
 
   /**
@@ -903,21 +884,14 @@ public final class Iterables {
     checkNotNull(iterable);
     checkArgument(numberToSkip >= 0, "number to skip cannot be negative");
 
-    if (iterable instanceof List) {
-      final List<T> list = (List<T>) iterable;
-      return new FluentIterable<T>() {
-        @Override
-        public Iterator<T> iterator() {
-          // TODO(kevinb): Support a concurrently modified collection?
-          int toSkip = Math.min(list.size(), numberToSkip);
-          return list.subList(toSkip, list.size()).iterator();
-        }
-      };
-    }
-
     return new FluentIterable<T>() {
       @Override
       public Iterator<T> iterator() {
+        if (iterable instanceof List) {
+          final List<T> list = (List<T>) iterable;
+          int toSkip = Math.min(list.size(), numberToSkip);
+          return list.subList(toSkip, list.size()).iterator();
+        }
         final Iterator<T> iterator = iterable.iterator();
 
         Iterators.advance(iterator, numberToSkip);
@@ -952,7 +926,13 @@ public final class Iterables {
 
       @Override
       public Spliterator<T> spliterator() {
-        return Streams.stream(iterable).skip(numberToSkip).spliterator();
+        if (iterable instanceof List) {
+          final List<T> list = (List<T>) iterable;
+          int toSkip = Math.min(list.size(), numberToSkip);
+          return list.subList(toSkip, list.size()).spliterator();
+        } else {
+          return Streams.stream(iterable).skip(numberToSkip).spliterator();
+        }
       }
     };
   }
@@ -1007,26 +987,14 @@ public final class Iterables {
    * @since 2.0
    */
   public static <T> Iterable<T> consumingIterable(final Iterable<T> iterable) {
-    if (iterable instanceof Queue) {
-      return new FluentIterable<T>() {
-        @Override
-        public Iterator<T> iterator() {
-          return new ConsumingQueueIterator<T>((Queue<T>) iterable);
-        }
-
-        @Override
-        public String toString() {
-          return "Iterables.consumingIterable(...)";
-        }
-      };
-    }
-
     checkNotNull(iterable);
 
     return new FluentIterable<T>() {
       @Override
       public Iterator<T> iterator() {
-        return Iterators.consumingIterator(iterable.iterator());
+        return (iterable instanceof Queue)
+            ? new ConsumingQueueIterator<>((Queue<T>) iterable)
+            : Iterators.consumingIterator(iterable.iterator());
       }
 
       @Override
@@ -1082,7 +1050,7 @@ public final class Iterables {
                 Iterables.transform(iterables, Iterables.<T>toIterator()), comparator);
           }
         };
-    return new UnmodifiableIterable<T>(iterable);
+    return new UnmodifiableIterable<>(iterable);
   }
 
   // TODO(user): Is this the best place for this? Move to fluent functions?

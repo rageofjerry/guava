@@ -21,7 +21,7 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 
 /**
- * Implementation of {@link ImmutableList} used for 0 or 2+ elements (not 1).
+ * Implementation of {@link ImmutableList} backed by a simple array.
  *
  * @author Kevin Bourrillion
  */
@@ -29,7 +29,7 @@ import java.util.Spliterators;
 @SuppressWarnings("serial") // uses writeReplace(), not default serialization
 class RegularImmutableList<E> extends ImmutableList<E> {
   static final ImmutableList<Object> EMPTY =
-      new RegularImmutableList<Object>(ObjectArrays.EMPTY_ARRAY);
+      new RegularImmutableList<Object>(new Object[0]);
 
   private final transient Object[] array;
 

@@ -20,6 +20,7 @@ import static com.google.common.io.RecursiveDeleteOption.ALLOW_INSECURE;
 import static com.google.common.jimfs.Feature.SECURE_DIRECTORY_STREAM;
 import static com.google.common.jimfs.Feature.SYMBOLIC_LINKS;
 import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 
 import com.google.common.collect.ObjectArrays;
@@ -40,6 +41,7 @@ import java.nio.file.attribute.FileTime;
 import java.util.EnumSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
@@ -48,7 +50,6 @@ import junit.framework.TestSuite;
  *
  * @author Colin Decker
  */
-@AndroidIncompatible
 
 public class MoreFilesTest extends TestCase {
 
@@ -176,6 +177,49 @@ public class MoreFilesTest extends TestCase {
         fail();
       } catch (IOException expected) {
       }
+    }
+  }
+
+  public void testEqual() throws IOException {
+    try (FileSystem fs = Jimfs.newFileSystem(Configuration.unix())) {
+      Path fooPath = fs.getPath("foo");
+      Path barPath = fs.getPath("bar");
+      MoreFiles.asCharSink(fooPath, UTF_8).write("foo");
+      MoreFiles.asCharSink(barPath, UTF_8).write("barbar");
+
+      assertThat(MoreFiles.equal(fooPath, barPath)).isFalse();
+      assertThat(MoreFiles.equal(fooPath, fooPath)).isTrue();
+      assertThat(MoreFiles.asByteSource(fooPath).contentEquals(MoreFiles.asByteSource(fooPath)))
+          .isTrue();
+
+      Path fooCopy = Files.copy(fooPath, fs.getPath("fooCopy"));
+      assertThat(Files.isSameFile(fooPath, fooCopy)).isFalse();
+      assertThat(MoreFiles.equal(fooPath, fooCopy)).isTrue();
+
+      MoreFiles.asCharSink(fooCopy, UTF_8).write("boo");
+      assertThat(MoreFiles.asByteSource(fooPath).size())
+          .isEqualTo(MoreFiles.asByteSource(fooCopy).size());
+      assertThat(MoreFiles.equal(fooPath, fooCopy)).isFalse();
+
+      // should also assert that a Path that erroneously reports a size 0 can still be compared,
+      // not sure how to do that with the Path API
+    }
+  }
+
+  public void testEqual_links() throws IOException {
+    try (FileSystem fs = Jimfs.newFileSystem(Configuration.unix())) {
+      Path fooPath = fs.getPath("foo");
+      MoreFiles.asCharSink(fooPath, UTF_8).write("foo");
+
+      Path fooSymlink = fs.getPath("symlink");
+      Files.createSymbolicLink(fooSymlink, fooPath);
+
+      Path fooHardlink = fs.getPath("hardlink");
+      Files.createLink(fooHardlink, fooPath);
+
+      assertThat(MoreFiles.equal(fooPath, fooSymlink)).isTrue();
+      assertThat(MoreFiles.equal(fooPath, fooHardlink)).isTrue();
+      assertThat(MoreFiles.equal(fooSymlink, fooHardlink)).isTrue();
     }
   }
 
@@ -582,29 +626,32 @@ public class MoreFilesTest extends TestCase {
    */
   private static void startDirectorySymlinkSwitching(
       final Path file, final Path target, ExecutorService executor) {
-    executor.submit(new Runnable() {
-      @Override
-      public void run() {
-        boolean createSymlink = false;
-        while (!Thread.interrupted()) {
-          try {
-            // trying to switch between a real directory and a symlink (dir -> /a)
-            if (Files.deleteIfExists(file)) {
-              if (createSymlink) {
-                Files.createSymbolicLink(file, target);
-              } else {
-                Files.createDirectory(file);
-              }
-              createSymlink = !createSymlink;
-            }
-          } catch (IOException tolerated) {
-            // it's expected that some of these will fail
-          }
+    @SuppressWarnings("unused") // go/futurereturn-lsc
+    Future<?> possiblyIgnoredError =
+        executor.submit(
+            new Runnable() {
+              @Override
+              public void run() {
+                boolean createSymlink = false;
+                while (!Thread.interrupted()) {
+                  try {
+                    // trying to switch between a real directory and a symlink (dir -> /a)
+                    if (Files.deleteIfExists(file)) {
+                      if (createSymlink) {
+                        Files.createSymbolicLink(file, target);
+                      } else {
+                        Files.createDirectory(file);
+                      }
+                      createSymlink = !createSymlink;
+                    }
+                  } catch (IOException tolerated) {
+                    // it's expected that some of these will fail
+                  }
 
-          Thread.yield();
-        }
-      }
-    });
+                  Thread.yield();
+                }
+              }
+            });
   }
 
   /**

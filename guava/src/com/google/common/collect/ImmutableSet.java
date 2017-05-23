@@ -26,6 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.concurrent.LazyInit;
+import com.google.j2objc.annotations.RetainedWith;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
@@ -33,6 +34,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.Spliterator;
 import java.util.function.Consumer;
 import java.util.stream.Collector;
@@ -253,7 +255,8 @@ public abstract class ImmutableSet<E> extends ImmutableCollection<E> implements 
      * TODO(lowasser): consider checking for ImmutableAsList here
      * TODO(lowasser): consider checking for Multiset here
      */
-    if (elements instanceof ImmutableSet && !(elements instanceof ImmutableSortedSet)) {
+    // Don't refer to ImmutableSortedSet by name so it won't pull in all that code
+    if (elements instanceof ImmutableSet && !(elements instanceof SortedSet)) {
       @SuppressWarnings("unchecked") // all supported methods are covariant
       ImmutableSet<E> set = (ImmutableSet<E>) elements;
       if (!set.isPartialView()) {
@@ -357,6 +360,7 @@ public abstract class ImmutableSet<E> extends ImmutableCollection<E> implements 
   public abstract UnmodifiableIterator<E> iterator();
 
   @LazyInit
+  @RetainedWith
   private transient ImmutableList<E> asList;
 
   @Override
